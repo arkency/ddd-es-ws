@@ -7,3 +7,5 @@ gem "ruby_event_store"
 group :test do
   gem "minitest"
 end
+
+gem "aggregate_root", "~> 3.2"

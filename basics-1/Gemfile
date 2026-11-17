@@ -5,7 +5,7 @@ source "https://rubygems.org"
 gem "ruby_event_store"
 gem "ruby_event_store-active_record"
 gem "activerecord"
-gem "sqlite3"
+gem "pg"
 
 group :test do
   gem "minitest"

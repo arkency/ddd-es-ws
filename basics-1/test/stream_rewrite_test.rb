@@ -4,12 +4,16 @@ require "minitest/autorun"
 require "ruby_event_store"
 require "ruby_event_store/active_record"
 require "active_record"
+require "concurrent"
 
-ActiveRecord::Base.establish_connection(adapter: "sqlite3", database: ":memory:")
+ActiveRecord::Base.establish_connection(adapter: "postgresql", database: "ddd_es_ws_test", pool: 5)
 ActiveRecord::Schema.verbose = false
 ActiveRecord::Schema.define do
-  create_table(:event_store_events) do |t|
-    t.references :event, null: false, type: :string, limit: 36, index: { unique: true }
+  drop_table :event_store_events_in_streams, if_exists: true
+  drop_table :event_store_events, if_exists: true
+
+  create_table(:event_store_events, id: :bigserial) do |t|
+    t.references :event, null: false, type: :uuid, index: { unique: true }
     t.string :event_type, null: false, index: true
     t.binary :metadata
     t.binary :data, null: false
@@ -17,14 +21,16 @@ ActiveRecord::Schema.define do
     t.datetime :valid_at, null: true, precision: 6, index: true
   end
 
-  create_table(:event_store_events_in_streams) do |t|
+  create_table(:event_store_events_in_streams, id: :bigserial) do |t|
     t.string :stream, null: false
     t.integer :position, null: true
-    t.references :event, null: false, type: :string, limit: 36, index: true
+    t.references :event, null: false, type: :uuid, index: true
     t.datetime :created_at, null: false, precision: 6, index: true
     t.index %i[stream position], unique: true
     t.index %i[stream event_id], unique: true
   end
+
+  add_foreign_key :event_store_events_in_streams, :event_store_events, column: :event_id, primary_key: :event_id
 end
 
 class StreamRewriteTest < Minitest::Test
@@ -76,12 +82,30 @@ class StreamRewriteTest < Minitest::Test
   end
 
   def test_rewrite_keeps_a_price_change_made_by_production_meanwhile
-    ActiveRecord::Base.transaction do
-      event_ids = @event_store.read.stream(OLD_STREAM).map(&:event_id)
-      production_changes_price_to(130)
-      @event_store.link(event_ids, stream_name: NEW_STREAM)
-      @event_store.delete_stream(OLD_STREAM)
+    ids_read = Concurrent::CountDownLatch.new
+    price_changed = Concurrent::CountDownLatch.new
+
+    rewrite = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        ActiveRecord::Base.transaction do
+          event_ids = @event_store.read.stream(OLD_STREAM).map(&:event_id)
+          ids_read.count_down
+          price_changed.wait(5)
+          @event_store.link(event_ids, stream_name: NEW_STREAM)
+          @event_store.delete_stream(OLD_STREAM)
+        end
+      end
     end
+
+    production = Thread.new do
+      ActiveRecord::Base.connection_pool.with_connection do
+        ids_read.wait(5)
+        production_changes_price_to(130)
+        price_changed.count_down
+      end
+    end
+
+    [rewrite, production].each(&:join)
 
     assert_equal 6, @event_store.read.count
     assert_equal [NEW_STREAM], streams

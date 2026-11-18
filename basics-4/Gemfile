@@ -8,4 +8,5 @@ gem "sqlite3"
 
 group :test do
   gem "minitest"
+  gem "solid_queue"
 end

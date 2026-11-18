@@ -1,0 +1,140 @@
+{
+  "title": "Booking a desk: event storming board",
+  "lede": "Desk booking from the presenter script in `demo/README.md` (steps 2–5). Entry point: `Reservations::Commands.pre_reserve_desk`.",
+  "board": [
+    {
+      "title": "Set up the desk",
+      "sub": "once, before any booking",
+      "slots": [
+        {"type": "actor", "title": "Manager", "detail": "dashboard, Inventory panel"},
+        {"type": "command", "title": "Add desk", "code": "Inventory::Commands.add_desk", "detail": "name · zone"},
+        {"type": "event", "title": "Resource added", "code": "Inventory::Public::ResourceAdded", "detail": "resource_type desk"},
+        {"type": "command", "title": "Set opening hours", "code": "Inventory::Commands.add_availability_hours", "detail": "08:00–18:00"},
+        {"type": "event", "title": "Resource hours added", "code": "Inventory::Public::ResourceHoursAdded", "detail": "consumed by Availability's ACL"},
+        [{"type": "command", "title": "Assign price", "code": "Pricing::Commands.assign_pricing", "detail": "price_cents · unit day"},
+          {"type": "hotspot", "title": "Rejected until Pricing has mirrored the desk from ResourceAdded (async)"}],
+        {"type": "event", "title": "Pricing assigned", "code": "Pricing::Public::PricingAssigned", "detail": "consumed by Reservations' PricingAcl"}
+      ]
+    },
+    {
+      "title": "Pre-reserve the desk",
+      "kind": "request",
+      "sub": "separate request, one transaction",
+      "slots": [
+        {"type": "actor", "title": "Client", "detail": "dashboard form"},
+        {"type": "command", "title": "Pre-reserve desk", "code": "Reservations::Commands.pre_reserve_desk", "detail": "rejects: unknown or withdrawn · no tariff · no opening hours · outside hours · slot taken"},
+        {"type": "aggregate", "title": "Availability resource", "code": "Availability::Internal::Resource", "detail": "one stream per resource"},
+        {"type": "event", "title": "Slot temporarily blocked", "code": "SlotTemporarilyBlocked", "detail": "hold keyed by reservation id"},
+        {"type": "readmodel", "title": "Reservation", "code": "reservations_reservations", "detail": "status awaiting_payment"},
+        [{"type": "event", "title": "Reservation requested", "code": "Reservations::ReservationRequested", "detail": "private to Reservations"},
+          {"type": "hotspot", "title": "Availability is called synchronously inside the transaction: if it raises, the pre-reservation fails"}]
+      ]
+    },
+    {
+      "title": "Pay",
+      "kind": "request",
+      "sub": "separate request, after pre-reservation",
+      "slots": [
+        {"type": "actor", "title": "Client", "detail": "Pay → checkout, then Confirmed"},
+        {"type": "command", "title": "Request payment", "code": "Payments::Commands.request_payment", "detail": "reference = reservation id"},
+        {"type": "event", "title": "Payment requested", "code": "Payments::PaymentRequested", "detail": "private to Payments"},
+        {"type": "command", "title": "Gateway confirmed", "code": "Payments::Commands.gateway_confirmed", "detail": "the dashboard stands in for the gateway"},
+        {"type": "aggregate", "title": "Payment", "code": "Payments::Internal::Payment", "detail": "pending → received"},
+        {"type": "event", "title": "Payment received", "code": "Payments::Public::PaymentReceived", "detail": "reference · amount_cents"}
+      ]
+    },
+    {
+      "between": "transaction commits · two jobs start"
+    },
+    {
+      "parallel": "A and B run in parallel · no ordering between them",
+      "lanes": [
+        {
+          "title": "Settle",
+          "tag": "A",
+          "kind": "job",
+          "sub": "async job, after commit",
+          "slots": [
+            {"type": "event", "title": "Payment received", "code": "Payments::Public::PaymentReceived", "detail": "from the payment", "copy": true},
+            {"type": "policy", "title": "Whenever a payment for a reservation is received, settle the reservation", "code": "Reservations::Integrations::PaymentsAcl"},
+            {"type": "command", "title": "Settle reservation", "code": "Reservations::Commands.settle", "detail": "rejects: not awaiting payment · amount mismatch"},
+            {"type": "aggregate", "title": "Availability resource", "code": "AvailabilityConformist.block", "detail": "full hold, same reference"},
+            {"type": "readmodel", "title": "Reservation", "code": "reservations_reservations", "detail": "status reserved"},
+            [{"type": "event", "title": "Reservation confirmed", "code": "Reservations::Public::ReservationConfirmed", "detail": "public · Invoicing and Facility Access subscribe"},
+              {"type": "hotspot", "title": "If settle raises, the payment is already taken and the reservation stays awaiting_payment"}]
+          ]
+        },
+        {
+          "title": "Record settlement",
+          "tag": "B",
+          "kind": "job",
+          "sub": "async job, after commit",
+          "slots": [
+            {"type": "event", "title": "Payment received", "code": "Payments::Public::PaymentReceived", "detail": "from the payment", "copy": true},
+            {"type": "policy", "title": "Whenever a payment is received, record it as a settlement", "code": "Invoicing::Integrations::PaymentsAcl"},
+            {"type": "command", "title": "Record settlement", "code": "Invoicing::Commands.record_settlement", "detail": "keyed by order_ref"},
+            {"type": "readmodel", "title": "Settlement", "code": "Invoicing::ReadModels::Settlement"},
+            [{"type": "event", "title": "Settlement recorded", "code": "Invoicing::SettlementRecorded", "detail": "private to Invoicing"},
+              {"type": "hotspot", "title": "Can land before the invoice exists: settlements are matched when displayed"}]
+          ]
+        }
+      ]
+    },
+    {
+      "between": "reservation confirmed · two jobs start"
+    },
+    {
+      "parallel": "C and D run in parallel · no ordering between them",
+      "lanes": [
+        {
+          "title": "Invoice",
+          "tag": "C",
+          "kind": "job",
+          "sub": "async job, after commit",
+          "slots": [
+            {"type": "event", "title": "Reservation confirmed", "code": "Reservations::Public::ReservationConfirmed", "detail": "from Settle", "copy": true},
+            {"type": "policy", "title": "Whenever a reservation is confirmed, invoice it", "code": "Invoicing::Integrations::ReservationsAcl"},
+            {"type": "command", "title": "Generate invoice", "code": "Invoicing::Commands.generate_invoice", "detail": "no contract terms → billed directly, payment_terms_days 0"},
+            {"type": "readmodel", "title": "Invoice", "code": "Invoicing::ReadModels::Invoice"},
+            {"type": "event", "title": "Invoice generated", "code": "Invoicing::InvoiceGenerated"},
+            {"type": "external", "title": "Mailing system", "code": "External::MailingSystem", "detail": "invoice e-mail"},
+            {"type": "event", "title": "Invoice sent", "code": "Invoicing::InvoiceSent"}
+          ]
+        },
+        {
+          "title": "Access pass",
+          "tag": "D",
+          "kind": "job",
+          "sub": "async job, after commit",
+          "slots": [
+            {"type": "event", "title": "Reservation confirmed", "code": "Reservations::Public::ReservationConfirmed", "detail": "from Settle", "copy": true},
+            {"type": "policy", "title": "Whenever a reservation is confirmed, grant access to it", "code": "FacilityAccess::Integrations::ReservationsAcl", "detail": "desk → co-work floor"},
+            {"type": "command", "title": "Grant access", "code": "FacilityAccess::Commands.grant_access"},
+            {"type": "readmodel", "title": "Pass", "code": "FacilityAccess::ReadModels::Pass", "detail": "QR code · valid_on · hours"},
+            {"type": "event", "title": "Access to co-work granted", "code": "FacilityAccess::AccessToCoworkGranted"},
+            {"type": "external", "title": "Mailing system", "code": "External::MailingSystem", "detail": "QR code e-mail"},
+            {"type": "event", "title": "Codes sent", "code": "FacilityAccess::CodesSent"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Scan at the door",
+      "kind": "request",
+      "sub": "separate request, on the valid day and hours",
+      "slots": [
+        {"type": "actor", "title": "Client", "detail": "shows the QR code"},
+        {"type": "command", "title": "Scan", "code": "FacilityAccess::Commands.scan", "detail": "rejects: unknown code · wrong day · outside hours"},
+        {"type": "event", "title": "QR code scanned", "code": "FacilityAccess::QrCodeScanned"},
+        [{"type": "event", "title": "QR code accepted", "code": "FacilityAccess::QrCodeAccepted"},
+          {"type": "event", "title": "QR code rejected", "code": "FacilityAccess::QrCodeRejected", "detail": "+ customer service notified"}]
+      ]
+    }
+  ],
+  "hotspots": [
+    "Pre-reserve reads the desk row and tariff from Reservations' async ACLs. Until they land, it rejects the booking.",
+    "Pre-reserve calls Availability synchronously inside its transaction: an Availability failure fails the booking.",
+    "Settle runs in an async job after the payment is received. If it raises (amount mismatch, not awaiting payment), the money is taken and the reservation stays awaiting_payment.",
+    "Without contract terms, Invoicing bills the client directly with payment_terms_days 0; the desk flow never waits for Contracts."
+  ]
+}

@@ -1,0 +1,7 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Wipes the demo database: all events, all read models.
+require_relative "../config/environment"
+load Rails.root.join("db/schema.rb")
+puts "demo database reset"

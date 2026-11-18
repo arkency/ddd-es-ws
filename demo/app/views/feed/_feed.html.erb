@@ -1,0 +1,35 @@
+<%# One event per row; under it, every downstream context it is travelling to or has reached, and the read-model tables it wrote. %>
+<% if @events.empty? %>
+  <p class="muted">No events yet.</p>
+<% end %>
+<% @events.each do |event| %>
+  <% context, *rest = event.event_type.split("::"); public_event = rest.first == "Public" %>
+  <% deliveries = @deliveries.fetch(event.event_id, []) %>
+  <div class="event <%= "in-transit" if deliveries.any?(&:in_transit?) %>">
+    <div>
+      <span class="time"><%= event.metadata[:timestamp]&.in_time_zone&.strftime("%H:%M:%S.%L") %></span>
+      <span class="ctx"><%= context.titleize %></span>
+      <strong><%= rest.last %></strong>
+      <span class="badge <%= public_event ? "up" : "private" %>"><%= public_event ? "public" : "private" %></span>
+    </div>
+    <% if (cause = @types_by_id[event.metadata[:causation_id]]) %>
+      <div class="caused">caused by <%= cause.split("::").values_at(0, -1).join(" · ") %></div>
+    <% end %>
+    <% deliveries.sort_by { |log| ContextMap.edge_for(log.integration)&.downstream.to_s }.each do |log| %>
+      <% edge = ContextMap.edge_for(log.integration) %>
+      <div class="delivery <%= log.in_transit? ? "transit" : "done" %>">
+        → <%= edge.downstream.titleize %> <span class="muted">(<%= edge.downstream_role %>)</span>
+        <% if log.in_transit? %>
+          <span class="travel"><span class="dot"></span></span> in transit
+        <% else %>
+          ✓ <span class="muted"><%= log.latency_ms %> ms</span>
+          <div style="margin-left:14px;font-size:11px;color:#9ca3af">
+            writes
+            <% if log.read_models.empty? %><em>no read model</em><% end %>
+            <% log.read_models.each do |table| %><code style="color:#fde68a"><%= table %></code> <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+<% end %>

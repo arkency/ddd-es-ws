@@ -1,0 +1,105 @@
+<p class="muted">
+  A predefined scenario is a list of ordinary commands, one per bounded context, run in order.
+  Nothing here bypasses a context: every step below is the same <code>&lt;Context&gt;::Commands</code> call the
+  dashboard makes. Between the steps, the context map is the only thing moving.
+</p>
+
+<div class="scenarios">
+  <section class="library">
+    <h2>Scenarios</h2>
+    <p class="hint">Pick a run. It keeps its own correlation id; the feed on the right shows only that run.</p>
+
+    <div class="group">Happy paths</div>
+    <% @scenarios.select { |s| s.kind == "happy path" }.each do |scenario| %>
+      <%= render "scenario_link", scenario: scenario %>
+    <% end %>
+
+    <div class="group">Mechanics</div>
+    <% @scenarios.select { |s| s.kind == "mechanics" }.each do |scenario| %>
+      <%= render "scenario_link", scenario: scenario %>
+    <% end %>
+  </section>
+
+  <section class="runner">
+    <div class="runner-head">
+      <h2><%= @scenario.title %> <%= tag.span(@scenario.kind, class: "badge tag") %></h2>
+      <p class="tagline"><%= @scenario.blurb %></p>
+      <% if @scenario.watch.present? %><p class="tagline">Watch: <%= @scenario.watch %></p><% end %>
+      <div class="controls">
+        <%= button_to "▶ Run all", scenario_run_all_path(@scenario.key), method: :post,
+                      class: "primary", disabled: @runner.finished?,
+                      form: { class: "cmd inline" } %>
+        <%= button_to "Step", scenario_step_path(@scenario.key), method: :post,
+                      disabled: @runner.finished?, form: { class: "cmd inline" } %>
+        <%= button_to "Start over", scenario_start_path(@scenario.key), method: :post, form: { class: "cmd inline" } %>
+        <%= button_to "Reset db & run", scenario_reset_path(@scenario.key), method: :post, form: { class: "cmd inline" } %>
+        <span class="runid">correlation <code><%= @run.correlation_id %></code> · <a href="/res">open in /res</a></span>
+      </div>
+    </div>
+
+    <div class="steps">
+      <% @scenario.steps.each_with_index do |definition, index| %>
+        <% state = @log[index] %>
+        <% classes = ["step"] %>
+        <% classes << (state["status"] == "ok" ? "done" : state["status"]) if state %>
+        <% classes << "next" if state.nil? && index == @run.next_step %>
+        <% args = state ? state["args"] : (index == @run.next_step ? @next_args : {}) %>
+        <div class="<%= classes.join(" ") %>" id="step-<%= index + 1 %>">
+          <div class="n"><%= index + 1 %></div>
+          <div>
+            <div class="cmd">
+              <span class="ctx"><%= definition.context.titleize %></span>
+              <span class="muted"><%= context_kind(definition.context) %></span>
+              <span class="mono"><%= definition.command %></span>
+              <% if args.present? %>
+                <span class="args">
+                  <% args.each do |name, value| %><span><%= name %>: <b><%= scenario_arg_value(value) %></b></span> <% end %>
+                </span>
+              <% end %>
+              <% if state && state["status"] == "ok" %> <span class="badge up">done ✓ <%= state["ms"] %> ms</span><% end %>
+              <% if state && state["status"] == "expected_error" %> <span class="badge" style="color:var(--acl)">failed as expected</span><% end %>
+              <% if state.nil? && index == @run.next_step %> <span class="badge" style="color:var(--hot)">next</span><% end %>
+            </div>
+
+            <% if state && state["error"] %><div class="note"><%= state["error"] %></div><% end %>
+            <% if definition.note %><div class="note"><%= definition.note %></div><% end %>
+
+            <% Array(state && state["events"]).each do |event| %>
+              <div class="out">
+                <strong><%= scenario_event_name(event["type"]) %></strong>
+                <span class="badge <%= scenario_event_public?(event["type"]) ? "up" : "private" %>">
+                  <%= scenario_event_public?(event["type"]) ? "public" : "private" %>
+                </span>
+              </div>
+              <% IntegrationLog.where(event_id: event["id"]).each do |log| %>
+                <% edge = ContextMap.edge_for(log.integration) %>
+                <div class="deliv <%= log.in_transit? ? "transit" : "done" %>">
+                  → <%= edge ? edge.downstream.titleize : log.integration %>
+                  <% if edge %><span class="muted">(<%= edge.downstream_role %>)</span><% end %>
+                  <% if log.in_transit? %>
+                    <span class="travel"><span class="dot"></span></span> in transit
+                  <% else %>
+                    ✓ <span class="muted"><%= log.latency_ms %> ms<% if log.read_models.any? %> · writes <%= log.read_models.join(", ") %><% end %></span>
+                  <% end %>
+                </div>
+              <% end %>
+            <% end %>
+
+            <% if state.nil? && definition.wait_for.any? %>
+              <div class="out muted">waits for <%= definition.wait_for.map { |type| scenario_event_name(type) }.join(" + ") %></div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <% if @checks.any? %>
+      <div class="checks">
+        <h3>After the run</h3>
+        <% @checks.each do |label, result| %>
+          <div><span class="<%= result %>"><%= result == "passed" ? "✓" : "✗" %></span> <%= label %></div>
+        <% end %>
+      </div>
+    <% end %>
+  </section>
+</div>

@@ -1,0 +1,28 @@
+<%= panel "Inventory" do %>
+  <%= command_form "inventory", "add_desk", "Add desk" do %><%= arg :name, "D#{Inventory::ReadModels::Resource.where(resource_type: 'desk').count + 1}" %><%= arg :zone, "Window" %><% end %>
+  <%= command_form "inventory", "add_conference_room", "Add conference room" do %><%= arg :name, "Orion" %><%= arg_number :capacity, 12 %><% end %>
+  <p class="muted">One <code>ResourceAdded</code> event for both. <code>resource_type</code> is the only difference; ids are UUIDv7.</p>
+  <table>
+    <tr><th>id</th><th>type</th><th>name</th><th>details</th><th>status</th><th>photos</th><th>hours</th><th></th></tr>
+    <% Inventory::ReadModels::Resource.order(:resource_type, :name).each do |resource| %>
+      <tr>
+        <td class="mono"><%= short resource.id %></td><td><%= resource.resource_type %></td><td><%= resource.name %></td>
+        <td><%= resource.desk? ? resource.zone : "#{resource.capacity} seats" %></td>
+        <td><%= resource.status %></td><td><%= resource.photos_count %></td>
+        <td><%= resource.opens_at_hour ? "#{resource.opens_at_hour}-#{resource.closes_at_hour}" : "—" %></td>
+        <td>
+          <% if resource.status == "available" %>
+            <%= command_form "inventory", "add_availability_hours", "Set hours", inline: true, next_args: { resource_id: resource.id } do %>
+              <%= arg_hidden :resource_id, resource.id %><%= arg_number :opens_at_hour, resource.opens_at_hour || 8, style: "width:50px" %><%= arg_number :closes_at_hour, resource.closes_at_hour || (resource.desk? ? 18 : 20), style: "width:50px" %>
+            <% end %>
+            <% if resource.desk? %>
+              <%= command_form "inventory", "add_photo", "+ photo", inline: true do %><%= arg_hidden :resource_id, resource.id %><%= arg_hidden :url, "https://example.com/#{resource.name}.jpg" %><% end %>
+            <% end %>
+            <%= command_form "inventory", "take_resource_out_of_service", "Out of service", inline: true do %><%= arg_hidden :resource_id, resource.id %><% end %>
+            <%= command_form "inventory", "remove_resource", "Remove", inline: true do %><%= arg_hidden :resource_id, resource.id %><% end %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </table>
+<% end %>

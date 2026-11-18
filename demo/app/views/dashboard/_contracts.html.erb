@@ -1,0 +1,36 @@
+<%= panel "Contracts" do %>
+  <% rooms = Inventory::ReadModels::Resource.where(resource_type: "conference_room", status: "available").order(:name).map { |room| ["#{room.name} (#{short room.id})", room.id] } %>
+  <h3>1. Client requests a quote</h3>
+  <%= command_form "contracts", "request_quote", "Client requests quote" do %>
+    <%= arg :client_name, "Carol" %><%= arg :company, "ACME Sp. z o.o." %><%= arg :tax_id, "PL5250001009" %>
+    <%= arg_select :room_id, rooms, empty: "no conference room yet: add one in Inventory" %><%= date_field_tag "args[date]", Date.tomorrow, id: nil %>
+    <%= arg_number :from_hour, 10 %><%= arg_number :to_hour, 14 %>
+  <% end %>
+  <h3>2. Quotes and agreements</h3>
+  <table>
+    <tr><th>id</th><th>client</th><th>room</th><th>when</th><th>price</th><th>disc.</th><th>total</th><th>status</th><th></th></tr>
+    <% Contracts::ReadModels::Agreement.order(:date).each do |agreement| %>
+      <tr>
+        <td class="mono"><%= short agreement.id %></td><td><%= agreement.client_name %><br><span class="muted"><%= agreement.company %></span></td>
+        <td class="mono"><%= short agreement.room_id %></td><td><%= agreement.date %> <%= agreement.from_hour %>-<%= agreement.to_hour %></td>
+        <td><%= money agreement.price_cents %></td><td><%= agreement.discount_percent %>%</td><td><%= money agreement.total_cents %></td>
+        <td><%= agreement.status %><%= " #{agreement.document_id}" if agreement.document_id %></td>
+        <td>
+          <% case agreement.status %>
+          <% when "requested" %>
+            <%= command_form "contracts", "create_draft", "Price & create draft", inline: true, next_args: { agreement_id: agreement.id } do %>
+              <%= arg_hidden :agreement_id, agreement.id %><%= arg_number :price_cents, 100000 %>
+            <% end %>
+          <% when "draft" %>
+            <%= command_form "contracts", "send_draft", "Send to client", inline: true, next_args: { agreement_id: agreement.id } do %><%= arg_hidden :agreement_id, agreement.id %><% end %>
+          <% when "sent" %>
+            <%= command_form "contracts", "apply_discount", "Discount %", inline: true do %><%= arg_hidden :agreement_id, agreement.id %><%= arg_number :percent, 10 %><% end %>
+            <%= command_form "contracts", "generate", "Generate (DocuWare)", inline: true, next_args: { agreement_id: agreement.id } do %><%= arg_hidden :agreement_id, agreement.id %><% end %>
+          <% when "generated" %>
+            <%= command_form "contracts", "sign", "Sign", inline: true, next_args: { agreement_id: agreement.id } do %><%= arg_hidden :agreement_id, agreement.id %><% end %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </table>
+<% end %>

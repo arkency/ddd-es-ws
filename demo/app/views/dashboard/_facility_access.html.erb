@@ -1,0 +1,20 @@
+<%= panel "FacilityAccess", title: "Facility Access" do %>
+  <% passes = FacilityAccess::ReadModels::Pass.order(:valid_on, :id).to_a %>
+  <% next_pass = passes.detect { |pass| !FacilityAccess::ReadModels::Scan.exists?(code: pass.code, result: "accepted") } || passes.last %>
+  <table>
+    <tr><th>code</th><th>holder</th><th>zone</th><th>valid</th><th>status</th></tr>
+    <% passes.each do |pass| %>
+      <tr><td class="mono"><%= pass.code %></td><td><%= pass.holder %></td><td><%= pass.zone %></td><td><%= pass.valid_on %> <%= pass.from_hour %>-<%= pass.to_hour %></td><td><%= pass.status %></td></tr>
+    <% end %>
+  </table>
+  <%= command_form "facility_access", "scan", "Scan QR code" do %>
+    <%= arg :code, next_pass&.code %>
+    <%= datetime_local_field_tag "args[at]", next_pass ? "#{next_pass.valid_on}T#{format('%02d', next_pass.from_hour)}:30" : nil, id: nil %>
+  <% end %>
+  <h3>Scans</h3>
+  <table>
+    <% FacilityAccess::ReadModels::Scan.order(id: :desc).limit(10).each do |scan| %>
+      <tr><td class="mono"><%= scan.code %></td><td><%= scan.scanned_at.strftime("%F %H:%M") %></td><td><%= scan.result %></td></tr>
+    <% end %>
+  </table>
+<% end %>

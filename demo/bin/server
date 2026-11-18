@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+cd "$(dirname "$0")/.." && exec bundle exec puma -p "${PORT:-3000}" config.ru

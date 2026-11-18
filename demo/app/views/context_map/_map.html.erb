@@ -1,0 +1,71 @@
+<%
+  nodes = {
+    "Negotiations" => [50, 440, "#f9d2a8"], "Contracts" => [370, 415, "#fba450"], "Inventory" => [575, 175, "#ffc4c4"],
+    "Pricing" => [630, 505, "#e5e7eb"], "Availability" => [905, 505, "#5eead4"], "Reservations" => [905, 325, "#9a4a0a"],
+    "Payments" => [935, 125, "#fff4b3"], "Invoicing" => [1265, 125, "#c08a00"], "FacilityAccess" => [1265, 330, "#b0f0c8"],
+  }
+  rx, ry = 80, 34
+  # Role label just outside the ellipse, on the side the edge leaves it (dx, dy: unit vector away from the node).
+  label_at = lambda do |cx, cy, dx, dy|
+    boundary = 1 / Math.sqrt((dx / rx)**2 + (dy / ry)**2) + 6
+    x, y = cx + dx * boundary, cy + dy * boundary
+    if dx.abs > 0.35 then [x.round, (y - 4).round, dx.positive? ? "start" : "end"]
+    else [(x + 6).round, (y + (dy.positive? ? 12 : -2)).round, "start"]
+    end
+  end
+  hot_since = 4.seconds.ago
+%>
+<svg viewBox="-40 70 1400 490" width="100%" style="background:#fff;border:1px solid var(--line);border-radius:8px">
+  <% @edges.each do |edge| %>
+    <%
+      x1, y1 = nodes.fetch(edge.upstream); x2, y2 = nodes.fetch(edge.downstream)
+      length = Math.hypot(x2 - x1, y2 - y1); ux = (x2 - x1) / length; uy = (y2 - y1) / length
+      logs = @logs_by_integration[edge.integration.name] || []
+      in_transit = logs.count(&:in_transit?)
+      delivered = logs.size - in_transit
+      written = logs.reject(&:in_transit?).flat_map(&:read_models).uniq.sort
+      hot = logs.any? { |log| log.handled_at && log.handled_at > hot_since }
+      color = in_transit.positive? ? "var(--transit)" : hot ? "var(--hot)" : "#9ca3af"
+    %>
+    <line x1="<%= x1 %>" y1="<%= y1 %>" x2="<%= x2 %>" y2="<%= y2 %>" stroke="<%= color %>" stroke-width="<%= hot || in_transit.positive? ? 4 : 1.5 %>"
+          <%= 'stroke-dasharray="7 5"'.html_safe if edge.events.empty? %>><title><%= edge.integration.name %></title></line>
+    <% if in_transit.positive? %>
+      <%# Events on their way: dots running from upstream to downstream. %>
+      <% in_transit.clamp(1, 3).times do |i| %>
+        <circle r="7" fill="var(--transit)" stroke="#fff" stroke-width="2">
+          <animateMotion dur="1.4s" begin="<%= (i * 0.45).round(2) %>s" repeatCount="indefinite" path="M<%= x1 %>,<%= y1 %> L<%= x2 %>,<%= y2 %>"/>
+        </circle>
+      <% end %>
+    <% end %>
+    <% ux1, uy1, anchor1 = label_at.(x1, y1, ux, uy); ux2, uy2, anchor2 = label_at.(x2, y2, -ux, -uy) %>
+    <text x="<%= ux1 %>" y="<%= uy1 %>" font-size="12" fill="var(--up)" text-anchor="<%= anchor1 %>">U · <%= edge.upstream_role %></text>
+    <text x="<%= ux2 %>" y="<%= uy2 %>" font-size="12" fill="<%= edge.downstream_role == "ACL" ? "var(--acl)" : "var(--conf)" %>" text-anchor="<%= anchor2 %>">D · <%= edge.downstream_role %></text>
+    <% if delivered.positive? %>
+      <circle cx="<%= (x1 + x2) / 2 %>" cy="<%= (y1 + y2) / 2 %>" r="11" fill="<%= hot ? "var(--hot)" : "#9ca3af" %>"><title>writes <%= written.join(", ") %></title></circle>
+      <text x="<%= (x1 + x2) / 2 %>" y="<%= (y1 + y2) / 2 + 4 %>" font-size="11" fill="#fff" text-anchor="middle"><%= delivered %></text>
+    <% end %>
+  <% end %>
+  <% nodes.each do |name, (x, y, fill)| %>
+    <ellipse cx="<%= x %>" cy="<%= y %>" rx="<%= rx %>" ry="<%= ry %>" fill="<%= fill %>" stroke="#6b7280"/>
+    <text x="<%= x %>" y="<%= y + 5 %>" font-size="15" font-weight="600" text-anchor="middle" fill="<%= name == "Reservations" ? "#fff" : "#111827" %>"><%= name.titleize %></text>
+  <% end %>
+</svg>
+
+<h3>Edges</h3>
+<table class="panel">
+  <tr><th>upstream</th><th>downstream</th><th>transport</th><th>integration (downstream code)</th><th>crossed</th><th>in transit</th><th>last message</th><th>read models written</th><th>latency</th></tr>
+  <% @edges.each do |edge| %>
+    <% logs = @logs_by_integration[edge.integration.name] || []; last = logs.reject(&:in_transit?).max_by(&:handled_at); written = logs.reject(&:in_transit?).flat_map(&:read_models).uniq.sort %>
+    <tr>
+      <td><%= edge.upstream %> <span class="badge up"><%= edge.upstream_role %></span></td>
+      <td><%= edge.downstream %> <span class="badge down <%= edge.downstream_role.downcase %>"><%= edge.downstream_role %></span></td>
+      <td><%= edge.transport %></td>
+      <td class="mono"><%= edge.integration.name %><br><span class="muted">contexts/<%= edge.integration.name.underscore %>.rb</span></td>
+      <td><%= logs.count { |log| !log.in_transit? } %></td>
+      <td><%= logs.count(&:in_transit?).nonzero? %></td>
+      <td class="mono"><%= last&.message&.demodulize %></td>
+      <td class="mono"><%= written.join(", ") %></td>
+      <td><%= last&.latency_ms ? "#{last.latency_ms} ms" : (last ? "sync" : "") %></td>
+    </tr>
+  <% end %>
+</table>

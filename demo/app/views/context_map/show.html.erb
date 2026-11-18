@@ -1,0 +1,8 @@
+<p class="muted">
+  Drawn from <code>config/context_map.rb</code>. Solid = async events (OHS/PL → ACL/Conformist job), dashed = sync facade call.
+  Orange with moving dots = events in transit to the downstream context. Red = delivered in the last few seconds.
+  Number = messages delivered across the edge. Turn on slow motion in the side panel to watch it.
+</p>
+<div data-poll="<%= context_map_live_path %>" data-interval="500">
+  <%= render "map" %>
+</div>

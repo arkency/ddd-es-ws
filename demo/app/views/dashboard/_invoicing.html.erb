@@ -1,0 +1,22 @@
+<%= panel "Invoicing" do %>
+  <h3>Invoices</h3>
+  <table>
+    <tr><th>number</th><th>order_ref</th><th>buyer</th><th>tax id</th><th>line</th><th>net</th><th>terms</th><th>status</th><th>settled</th></tr>
+    <% Invoicing::ReadModels::Invoice.order(:number).each do |invoice| %>
+      <tr>
+        <td><%= invoice.number %></td><td class="mono"><%= short invoice.order_ref %></td><td><%= invoice.buyer_name %></td><td><%= invoice.tax_id %></td>
+        <td><%= invoice.description %></td><td><%= money invoice.net_cents %></td><td><%= invoice.payment_terms_days %> d</td><td><%= invoice.status %></td>
+        <td><%= invoice.settled? ? "yes" : "no" %></td>
+      </tr>
+    <% end %>
+  </table>
+  <h3>Billing terms <span class="muted">(from ContractsAcl)</span> and settlements <span class="muted">(from PaymentsAcl)</span></h3>
+  <table>
+    <% Invoicing::ReadModels::BillingTerms.all.each do |terms| %>
+      <tr><td>terms</td><td class="mono"><%= short terms.contract_ref %></td><td><%= terms.buyer_name %>, <%= terms.tax_id %>, <%= terms.payment_terms_days %> days</td></tr>
+    <% end %>
+    <% Invoicing::ReadModels::Settlement.all.each do |settlement| %>
+      <tr><td>settlement</td><td class="mono"><%= short settlement.order_ref %></td><td><%= money settlement.amount_cents %></td></tr>
+    <% end %>
+  </table>
+<% end %>

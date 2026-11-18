@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <title>Co-work — context map demo</title>
+  <meta charset="utf-8">
+  <%= csrf_meta_tags %>
+  <% if params[:live].present? %><meta http-equiv="refresh" content="2"><% end %>
+  <style>
+    :root { --bg:#f6f7f9; --card:#fff; --line:#d9dde3; --muted:#6b7280; --acl:#b45309; --conf:#7c3aed; --up:#047857; --hot:#dc2626; --transit:#f59e0b; --next:#2563eb; --feed:420px; }
+    * { box-sizing: border-box; }
+    body { font: 13px/1.4 -apple-system, system-ui, sans-serif; margin: 0; background: var(--bg); color: #111827; }
+    nav { display:flex; gap:16px; align-items:center; padding:10px 16px; background:#111827; color:#fff; position: sticky; top:0; z-index:2; }
+    nav a { color:#fff; text-decoration:none; } nav a.active { text-decoration: underline; } nav .spacer { flex:1; }
+    .flash { margin:8px calc(var(--feed) + 16px) 8px 16px; padding:8px 12px; border-radius:6px; }
+    .notice { background:#ecfdf5; border:1px solid #a7f3d0; } .alert { background:#fef2f2; border:1px solid #fecaca; }
+    main { padding: 12px 16px; margin-right: var(--feed); }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(560px, 1fr)); gap:12px; }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; scroll-margin-top:52px; }
+    .panel h2 { font-size:15px; margin:0 0 8px; }
+    .panel h3 { font-size:12px; margin:10px 0 4px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .panel.is-next { border-color:var(--next); box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+    .badge { font-size:11px; font-weight:500; padding:1px 6px; border-radius:10px; border:1px solid; margin-left:2px; }
+    .badge.down.acl { color:var(--acl); } .badge.down.conformist { color:var(--conf); } .badge.up { color:var(--up); } .badge.private { color:var(--muted); }
+    .badge.next { color:#fff; background:var(--next); border-color:var(--next); }
+
+    /* "What to click next" banner and the highlighted form */
+    .next-step { display:flex; align-items:center; gap:12px; margin-bottom:12px; padding:10px 12px; background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid var(--next); border-radius:8px; }
+    .next-step.done { background:#ecfdf5; border-color:#a7f3d0; border-left-color:var(--up); }
+    .next-step .kicker { font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--next); }
+    .next-step.done .kicker { color:var(--up); }
+    .next-step-copy { flex:1; }
+    .next-step .go { white-space:nowrap; color:var(--next); font-weight:600; text-decoration:none; background:#fff; border:1px solid #bfdbfe; border-radius:6px; padding:4px 8px; }
+    .next-step .go:hover { background:#dbeafe; }
+    form.cmd.is-next input[type=submit] { background:var(--next); animation:next-pulse 1.8s ease-out infinite; }
+    @keyframes next-pulse { 0% { box-shadow:0 0 0 0 rgba(37,99,235,.5); } 70% { box-shadow:0 0 0 8px rgba(37,99,235,0); } 100% { box-shadow:0 0 0 0 rgba(37,99,235,0); } }
+    @media (prefers-reduced-motion: reduce) { form.cmd.is-next input[type=submit] { animation:none; } }
+    table { border-collapse:collapse; width:100%; } th, td { text-align:left; padding:3px 6px; border-bottom:1px solid #eef0f3; vertical-align:top; }
+    th { color:var(--muted); font-weight:500; }
+    form.cmd { display:flex; flex-wrap:wrap; gap:4px; margin:4px 0; } form.cmd.inline { display:inline-flex; margin:0; }
+    input, select { font:inherit; padding:2px 4px; } input[type=number] { width:90px; }
+    input[type=submit] { cursor:pointer; background:#1f2937; color:#fff; border:0; border-radius:4px; padding:3px 8px; }
+    code, .mono { font-family: ui-monospace, Menlo, monospace; font-size:12px; }
+    .muted { color:var(--muted); }
+    svg text { font-family: -apple-system, system-ui, sans-serif; }
+
+    /* Scenarios page: library on the left, step runner in the middle, the event feed on the right. */
+    .scenarios { display:grid; grid-template-columns: 258px minmax(0, 1fr); gap:12px; align-items:start; }
+    .library h2, .runner h2 { font-size:15px; margin:0 0 2px; }
+    .library .hint { font-size:12px; color:var(--muted); margin:0 0 10px; }
+    .group { font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin:14px 0 6px; }
+    .scenario { display:block; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin-bottom:6px; text-decoration:none; color:inherit; }
+    .scenario.sel { border-color:#111827; box-shadow:inset 3px 0 0 #111827; }
+    .scenario strong { display:block; font-size:13px; }
+    .scenario .meta { color:var(--muted); font-size:12px; margin-top:2px; }
+    .scenario .ctxs { margin-top:5px; display:flex; flex-wrap:wrap; gap:2px; }
+    .scenario .ctxs span { font-size:10px; color:#4b5563; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:8px; padding:0 5px; }
+    .runner-head { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+    .runner-head .tagline { color:var(--muted); margin:4px 0 0; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid #eef0f3; }
+    .controls form { display:inline; margin:0; }
+    .controls button, .controls input[type=submit] { font:inherit; border-radius:4px; border:1px solid var(--line); background:#fff; padding:3px 9px; cursor:pointer; }
+    .controls input[type=submit].primary { background:#1f2937; border-color:#1f2937; color:#fff; font-weight:600; }
+    .controls input[type=submit]:disabled { opacity:.45; cursor:default; }
+    .runid { margin-left:auto; font-size:12px; color:var(--muted); }
+    .runid code { color:#111827; }
+    .steps { margin:10px 0 0; }
+    .step { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:9px 12px; margin-bottom:6px; display:grid; grid-template-columns:22px minmax(0,1fr); gap:8px; }
+    .step .n { width:20px; height:20px; border-radius:50%; background:#eef0f3; color:#374151; font-size:11px; font-weight:600; display:flex; align-items:center; justify-content:center; }
+    .step.done .n { background:#ecfdf5; color:var(--up); border:1px solid #a7f3d0; }
+    .step.expected_error .n { background:#fffbeb; color:var(--acl); border:1px solid #fde68a; }
+    .step.next { border-color:var(--hot); box-shadow:0 0 0 2px rgba(220,38,38,.08); }
+    .step.next .n { background:#fef2f2; color:var(--hot); border:1px solid #fecaca; }
+    .step .cmd { display:flex; gap:6px; align-items:baseline; flex-wrap:wrap; }
+    .step .cmd .ctx { font-weight:600; }
+    .step .args { color:#4b5563; } .step .args b { color:#111827; font-weight:500; }
+    .step .out { margin-top:5px; font-size:12px; }
+    .step .deliv { font-size:12px; margin-top:3px; }
+    .step .deliv.done { color:#15803d; } .step .deliv.transit { color:var(--acl); }
+    .step .note { margin-top:5px; font-size:12px; color:var(--muted); border-left:2px solid #e5e7eb; padding-left:8px; }
+    .checks { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:10px 12px; margin-top:10px; }
+    .checks h3 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:0 0 6px; }
+    .checks div { margin-top:4px; color:#374151; }
+    .checks .passed { color:var(--up); } .checks .failed { color:var(--hot); }
+
+    /* Event feed side panel */
+    aside#feed { position:fixed; top:41px; right:0; bottom:0; width:var(--feed); background:#0f172a; color:#e5e7eb; display:flex; flex-direction:column; }
+    aside#feed header { padding:8px 12px; border-bottom:1px solid #1f2937; display:flex; align-items:center; gap:8px; }
+    aside#feed header form { margin-left:auto; } aside#feed select { background:#1f2937; color:#fff; border:1px solid #374151; }
+    aside#feed .events { overflow-y:auto; padding:6px 10px; flex:1; }
+    .event { padding:6px 4px; border-bottom:1px solid #1f2937; }
+    .event.in-transit { background:rgba(245,158,11,.08); }
+    .event .time { color:#9ca3af; font-family: ui-monospace, Menlo, monospace; font-size:11px; }
+    .event .ctx { color:#93c5fd; margin:0 4px; }
+    .event .badge.up { color:#6ee7b7; } .event .badge.private { color:#9ca3af; }
+    .event .caused { color:#9ca3af; font-size:11px; margin-left:4px; }
+    .delivery { margin-left:14px; font-size:12px; } .delivery.done { color:#86efac; } .delivery.transit { color:var(--transit); }
+    .delivery .muted { color:#9ca3af; }
+    .travel { display:inline-block; position:relative; width:46px; height:8px; vertical-align:middle; border-bottom:1px dashed var(--transit); margin:0 4px; }
+    .travel .dot { position:absolute; top:3px; width:8px; height:8px; border-radius:50%; background:var(--transit); animation: travel 1.2s linear infinite; }
+    @keyframes travel { from { left:0 } to { left:38px } }
+  </style>
+</head>
+<body>
+  <nav>
+    <strong>Co-work</strong>
+    <%= link_to "Dashboard", root_path(live: params[:live].presence), class: ("active" if current_page?(root_path)) %>
+    <%= link_to "Scenarios", scenarios_path, class: ("active" if controller_name == "scenarios") %>
+    <%= link_to "Context map", context_map_path, class: ("active" if current_page?(context_map_path)) %>
+    <%= link_to "Event store browser", "/res", target: "_blank" %>
+    <span class="spacer"></span>
+    <% if current_page?(root_path) %>
+      <% if params[:live].present? %>
+        <%= link_to "● panels auto-refresh 2s — stop", url_for(live: nil) %>
+      <% else %>
+        <%= link_to "○ auto-refresh panels", url_for(live: 1) %>
+      <% end %>
+    <% end %>
+  </nav>
+  <% flash.each do |kind, message| %><div class="flash <%= kind %>"><%= message %></div><% end %>
+  <main><%= yield %></main>
+
+  <aside id="feed">
+    <header>
+      <strong>Events</strong>
+      <span class="muted"><%= @feed_scope || "newest first" %></span>
+      <%= form_with url: slow_motion_path, method: :post do %>
+        <label>slow motion
+          <%= select_tag :seconds, options_for_select(SlowMotion::CHOICES.map { |s| [s.zero? ? "off" : "#{s}s per hop", s] }, SlowMotion.seconds),
+                         onchange: "this.form.submit()" %>
+        </label>
+      <% end %>
+    </header>
+    <div class="events" data-poll="<%= feed_path(correlation_id: @feed_correlation_id) %>" data-interval="500"></div>
+  </aside>
+
+  <script>
+    // Poll fragments; replace only when they change, so CSS/SVG animations keep running smoothly.
+    document.querySelectorAll("[data-poll]").forEach((element) => {
+      let last = null;
+      const tick = async () => {
+        try {
+          const response = await fetch(element.dataset.poll, { cache: "no-store" });
+          const html = await response.text();
+          if (response.ok && html !== last) { element.innerHTML = html; last = html; }
+        } catch (_) {}
+        setTimeout(tick, Number(element.dataset.interval || 1000));
+      };
+      tick();
+    });
+  </script>
+</body>
+</html>

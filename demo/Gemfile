@@ -1,0 +1,16 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gem "rails_event_store", "~> 3.2"
+gem "aggregate_root", "~> 3.2"
+gem "railties", "~> 8.1"
+gem "activerecord", "~> 8.1"
+gem "activejob", "~> 8.1"
+gem "actionpack", "~> 8.1"
+gem "sqlite3"
+gem "puma"
+
+group :test do
+  gem "minitest"
+end

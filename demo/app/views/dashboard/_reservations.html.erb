@@ -1,0 +1,45 @@
+<%= panel "Reservations" do %>
+  <% desks = Reservations::ReadModels::Desk.where(withdrawn: false).where.not(rate_cents: nil) %>
+  <p class="muted">The process layer. No Reservation aggregate: Availability owns the only decision that must be serialized, the rest is data from Inventory and Pricing. Availability is called synchronously.</p>
+  <%= command_form "reservations", "pre_reserve_desk", "Pre-reserve desk" do %>
+    <%= arg :client, "Anna" %><%= arg_select :resource_id, desks.map { |d| [d.label, d.resource_id] }, empty: "no priced desk yet: add one in Inventory, price it in Pricing" %>
+    <%= date_field_tag "args[date]", Date.tomorrow, id: nil %>
+  <% end %>
+  <h3>Desks <span class="muted">(reservations_desks, filled by InventoryAcl + PricingAcl)</span></h3>
+  <table>
+    <tr><th>resource_id</th><th>label</th><th>tariff</th><th>withdrawn</th></tr>
+    <% Reservations::ReadModels::Desk.order(:name).each do |desk| %>
+      <tr>
+        <td class="mono"><%= short desk.resource_id %></td><td><%= desk.label %></td>
+        <td><%= desk.rate_cents ? "#{money desk.rate_cents} / #{desk.rate_unit}" : "—" %></td><td><%= desk.withdrawn ? "yes" : "" %></td>
+      </tr>
+    <% end %>
+  </table>
+  <h3>Conference rooms <span class="muted">(reservations_conference_rooms)</span></h3>
+  <table>
+    <tr><th>resource_id</th><th>label</th><th>tariff</th><th>withdrawn</th></tr>
+    <% Reservations::ReadModels::ConferenceRoom.order(:name).each do |room| %>
+      <tr>
+        <td class="mono"><%= short room.resource_id %></td><td><%= room.label %></td>
+        <td><%= room.rate_cents ? "#{money room.rate_cents} / #{room.rate_unit}" : "—" %></td><td><%= room.withdrawn ? "yes" : "" %></td>
+      </tr>
+    <% end %>
+  </table>
+  <h3>Reservations</h3>
+  <table>
+    <tr><th>id</th><th>client</th><th>type</th><th>what</th><th>when</th><th>amount</th><th>status</th><th></th></tr>
+    <% Reservations::ReadModels::Reservation.order(:date).each do |reservation| %>
+      <tr>
+        <td class="mono"><%= short reservation.id %></td><td><%= reservation.client %></td><td><%= reservation.resource_type %></td><td><%= reservation.label %></td>
+        <td><%= reservation.date %> <%= reservation.from_hour %>-<%= reservation.to_hour %></td><td><%= money reservation.amount_cents %></td><td><%= reservation.status %></td>
+        <td>
+          <% if reservation.status == "awaiting_payment" && !Payments::ReadModels::Payment.exists?(reference: reservation.id, status: "pending") %>
+            <%= command_form "payments", "request_payment", "Pay → checkout", inline: true, next_args: { reference: reservation.id } do %>
+              <%= arg_hidden :reference, reservation.id %><%= arg_hidden :payer, reservation.client %><%= arg_hidden :amount_cents, reservation.amount_cents %>
+            <% end %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </table>
+<% end %>

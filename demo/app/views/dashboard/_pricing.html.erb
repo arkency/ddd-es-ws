@@ -1,0 +1,14 @@
+<%= panel "Pricing" do %>
+  <p class="muted">Conformist: this table mirrors Inventory's (resource_id, resource_type, zone, capacity, Inventory's statuses), filled by <code>Pricing::Integrations::InventoryConformist</code>. The unit follows the type: a desk per day, a room per hour.</p>
+  <table>
+    <tr><th>resource_id</th><th>type</th><th>name</th><th>details</th><th>status</th><th>price</th><th></th></tr>
+    <% Pricing::ReadModels::Resource.order(:resource_type, :name).each do |resource| %>
+      <tr>
+        <td class="mono"><%= short resource.resource_id %></td><td><%= resource.resource_type %></td><td><%= resource.name %></td>
+        <td><%= resource.resource_type == "desk" ? resource.zone : "#{resource.capacity} seats" %></td>
+        <td><%= resource.status %></td><td><%= money resource.price_cents %><%= " / #{resource.price_unit}" if resource.price_cents %></td>
+        <td><%= command_form "pricing", "assign_pricing", "Assign", inline: true, next_args: { resource_id: resource.resource_id } do %><%= arg_hidden :resource_id, resource.resource_id %><%= arg_number :price_cents, resource.price_cents || (resource.resource_type == "desk" ? 4_500 : 25_000) %><% end %></td>
+      </tr>
+    <% end %>
+  </table>
+<% end %>

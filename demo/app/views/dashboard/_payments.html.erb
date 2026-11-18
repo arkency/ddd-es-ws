@@ -1,0 +1,18 @@
+<%= panel "Payments" do %>
+  <p class="muted">Generic: an opaque reference and an amount. The buttons simulate the payment gateway callback.</p>
+  <table>
+    <tr><th>id</th><th>reference</th><th>payer</th><th>amount</th><th>status</th><th>payment gateway</th></tr>
+    <% Payments::ReadModels::Payment.order(:status).each do |payment| %>
+      <tr>
+        <td class="mono"><%= short payment.id %></td><td class="mono"><%= short payment.reference %></td><td><%= payment.payer %></td>
+        <td><%= money payment.amount_cents %></td><td><%= payment.status %></td>
+        <td>
+          <% if payment.status == "pending" %>
+            <%= command_form "payments", "gateway_confirmed", "Confirmed", inline: true, next_args: { payment_id: payment.id } do %><%= arg_hidden :payment_id, payment.id %><% end %>
+            <%= command_form "payments", "gateway_timed_out", "Time out", inline: true do %><%= arg_hidden :payment_id, payment.id %><% end %>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </table>
+<% end %>

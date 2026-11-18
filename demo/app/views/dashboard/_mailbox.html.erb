@@ -1,0 +1,9 @@
+<section class="panel" id="mailbox">
+  <h2>Mailing system <span class="muted">(external, fake)</span></h2>
+  <table>
+    <tr><th>from</th><th>to</th><th>subject</th><th>at</th></tr>
+    <% OutboxMessage.order(id: :desc).limit(15).each do |message| %>
+      <tr><td><%= message.sender %></td><td><%= message.recipient %></td><td><%= message.subject %></td><td><%= message.created_at.strftime("%H:%M:%S") %></td></tr>
+    <% end %>
+  </table>
+</section>

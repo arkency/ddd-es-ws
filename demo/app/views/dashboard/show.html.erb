@@ -1,0 +1,36 @@
+<% step = next_step %>
+<% if step %>
+  <div class="next-step">
+    <div class="next-step-copy">
+      <div class="kicker">Next step</div>
+      <strong><%= step.title %></strong>
+      <span class="muted"> — <%= step.hint %></span>
+    </div>
+    <%= link_to "Go to #{step.panel_name} ↓", "##{step.panel_id}", class: "go" %>
+  </div>
+<% else %>
+  <div class="next-step done">
+    <div class="next-step-copy">
+      <div class="kicker">Flow complete</div>
+      <strong>The demo flow is complete.</strong>
+      <span class="muted"> — add another desk or request another quote, or run <code>bin/reset</code> to start over.</span>
+    </div>
+  </div>
+<% end %>
+<p class="muted">
+  Every form calls <code>&lt;Context&gt;::Commands</code> of exactly one bounded context.
+  Everything else you see change happened through the context map: async events (ACL / Conformist jobs) or Reservations' sync calls to Availability.
+  Availability has no panel: it is a capability only Reservations talks to.
+  Turn on auto-refresh to watch downstream contexts catch up.
+</p>
+<div class="grid">
+  <%= render "inventory" %>
+  <%= render "pricing" %>
+  <%= render "reservations" %>
+  <%= render "payments" %>
+  <%= render "contracts" %>
+  <%= render "negotiations" %>
+  <%= render "invoicing" %>
+  <%= render "facility_access" %>
+  <%= render "mailbox" %>
+</div>

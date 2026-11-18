@@ -1,0 +1,16 @@
+<% run = ScenarioRunner.for(scenario) %>
+<% finished = run && run.next_step >= scenario.steps.size %>
+<% started = run && run.next_step.positive? %>
+<%= link_to scenarios_path(scenario: scenario.key),
+            class: "scenario #{"sel" if scenario.key == @scenario.key}" do %>
+  <strong><%= scenario.title %></strong>
+  <div class="meta">
+    <%= scenario.steps.size %> steps ·
+    <% if run.nil? %>not started
+    <% elsif finished %>finished
+    <% elsif started %><%= run.next_step %>/<%= scenario.steps.size %> done
+    <% else %>ready
+    <% end %>
+  </div>
+  <div class="ctxs"><% scenario.steps.map(&:context).uniq.each do |context| %><span><%= context.titleize %></span><% end %></div>
+<% end %>

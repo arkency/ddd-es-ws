@@ -1,0 +1,26 @@
+<%= panel "Negotiations" do %>
+  <p class="muted">Conformist: keyed by Contracts' agreement_id, terms stored exactly as Contracts published them (see raw keys below).</p>
+  <% Negotiations::ReadModels::Negotiation.all.each do |negotiation| %>
+    <% terms = negotiation.terms %>
+    <h3 class="mono"><%= short negotiation.agreement_id %> — <%= negotiation.status %></h3>
+    <table>
+      <tr><th>terms (Contracts' keys)</th><td class="mono"><%= terms.slice("client_name", "from_hour", "to_hour", "price_cents", "discount_percent", "total_cents").map { |k, v| "#{k}: #{v}" }.join(", ") %></td></tr>
+      <tr><th>on the table</th><td><%= negotiation.open_proposal ? negotiation.open_proposal.except("kind").map { |k, v| "#{k}: #{v}" }.join(", ") : "—" %></td></tr>
+      <tr><th>history</th><td><%= negotiation.history.join(" → ") %></td></tr>
+    </table>
+    <% if negotiation.status == "open" %>
+      <% if negotiation.open_proposal %>
+        <%= command_form "negotiations", "accept_proposal", "Accept (asks Contracts)", inline: true do %><%= arg_hidden :agreement_id, negotiation.agreement_id %><% end %>
+        <%= command_form "negotiations", "reject_proposal", "Reject", inline: true do %><%= arg_hidden :agreement_id, negotiation.agreement_id %><% end %>
+      <% else %>
+        <%= command_form "negotiations", "propose_price_change", "Propose price", inline: true do %>
+          <%= arg_hidden :agreement_id, negotiation.agreement_id %><%= arg_number :price_cents, terms["price_cents"].to_i * 8 / 10 %><%= arg_select :proposed_by, %w[client manager] %>
+        <% end %>
+        <%= command_form "negotiations", "propose_hours_change", "Propose hours", inline: true do %>
+          <%= arg_hidden :agreement_id, negotiation.agreement_id %><%= arg_number :from_hour, terms["from_hour"].to_i - 1 %><%= arg_number :to_hour, terms["to_hour"].to_i - 1 %><%= arg_select :proposed_by, %w[client manager] %>
+        <% end %>
+      <% end %>
+      <%= command_form "negotiations", "abandon", "Abandon", inline: true do %><%= arg_hidden :agreement_id, negotiation.agreement_id %><%= arg :reason, "client went silent" %><% end %>
+    <% end %>
+  <% end %>
+<% end %>

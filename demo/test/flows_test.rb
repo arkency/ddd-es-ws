@@ -55,7 +55,7 @@ class FlowsTest < DemoTest
     Inventory::Commands.take_resource_out_of_service(resource_id: desk_id)
     deliver_async_events
 
-    assert_raises(Reservations::Commands::NotBookable) do
+    assert_raises(Reservations::NotBookable) do
       Reservations::Commands.pre_reserve_desk(client: "Anna", resource_id: desk_id, date: DAY)
     end
     assert_nil Availability::Public.opening_hours(resource_id: desk_id, date: Date.iso8601(DAY))

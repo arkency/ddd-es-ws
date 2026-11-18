@@ -20,4 +20,10 @@ module Reservations
   ReservationRequested = Class.new(RubyEventStore::Event)
   ReservationRejected = Class.new(RubyEventStore::Event)
   ReservationExpired = Class.new(RubyEventStore::Event)
+
+  # Raised by the slices and part of what callers may rescue: the process's own failures,
+  # not one slice's implementation detail.
+  NotBookable = Class.new(StandardError)
+  NotAwaitingPayment = Class.new(StandardError)
+  AmountMismatch = Class.new(StandardError)
 end

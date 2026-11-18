@@ -43,9 +43,11 @@ Inside a context:
 
 | File | Holds |
 |---|---|
-| `commands.rb` | the entry point used by the UI and by the context's own integrations |
-| `internal/` | aggregates (`aggregate_root`) or internal tables (Reservations has none: its state is read models) |
-| `read_models.rb` | tables the dashboard shows. Reservations' tables are written by its commands (and ACLs); Availability projects its own events into `availability_hours`. |
+| `commands.rb` | the public entry point used by the UI and by other contexts: one delegating method per slice, no behaviour |
+| `<use_case>/command.rb` | one vertical slice's input, a `Data` value object that coerces the UI/event payload |
+| `<use_case>/handler.rb` | that slice's behaviour: guards, transaction, aggregate or read model, events |
+| `read_models.rb` | tables the dashboard shows. Reservations' tables are written by its handlers (and ACLs); Availability projects its own events into `availability_hours`. |
+| `internal/` | shared write paths: aggregates (`aggregate_root`), repositories, per-context publication |
 
 ## Edges
 
